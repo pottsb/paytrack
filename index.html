@@ -214,7 +214,8 @@
             title: `${entry.name} ${currencySymbol}${Number(entry.amount).toFixed(2)}`,
             start: formatIsoDate(lastDate),
             allDay: true,
-            color: pastColor
+            color: pastColor,
+            amount: Number(entry.amount)
           });
         }
         for (const futureDate of timeline.upcomingDates) {
@@ -222,7 +223,8 @@
             title: `${entry.name} ${currencySymbol}${Number(entry.amount).toFixed(2)}`,
             start: formatIsoDate(futureDate),
             allDay: true,
-            color: futureColor
+            color: futureColor,
+            amount: Number(entry.amount)
           });
         }
       }
@@ -255,7 +257,59 @@
         .join("");
     }
 
-    function renderCalendar(events) {
+    function getEventMonthKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function getMonthLabel(date) {
+      return date.toLocaleString("en-GB", { month: "long", year: "numeric" });
+    }
+
+    function parseIsoDate(value) {
+      const [year, month, day] = String(value).split("-").map(Number);
+      if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+      return new Date(year, month - 1, day);
+    }
+
+    function sumUniqueEventsForMonth(events, monthKey) {
+      const seen = new Set();
+      let total = 0;
+
+      for (const event of events) {
+        const eventDate = parseIsoDate(event.start);
+        if (!eventDate) continue;
+        if (getEventMonthKey(eventDate) !== monthKey) continue;
+
+        // Avoid double counting duplicate generated events with same date+title+amount.
+        const dedupeKey = `${event.start}|${event.title}|${Number(event.amount).toFixed(2)}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        total += Number(event.amount) || 0;
+      }
+
+      return total;
+    }
+
+    function renderMonthlySummaryTable(monthDate, moneyInEvents, moneyOutEvents) {
+      const tbody = document.getElementById("monthlySummaryBody");
+      if (!tbody) return;
+
+      const monthKey = getEventMonthKey(monthDate);
+      const moneyInTotal = sumUniqueEventsForMonth(moneyInEvents, monthKey);
+      const moneyOutTotal = sumUniqueEventsForMonth(moneyOutEvents, monthKey);
+      const netTotal = moneyInTotal - moneyOutTotal;
+      const totalClass = netTotal > 0 ? "total-positive" : (netTotal < 0 ? "total-negative" : "total-neutral");
+
+      tbody.innerHTML = `<tr>
+        <td>${currencySymbol}${moneyInTotal.toFixed(2)}</td>
+        <td>${currencySymbol}${moneyOutTotal.toFixed(2)}</td>
+        <td class="${totalClass}">${currencySymbol}${netTotal.toFixed(2)}</td>
+        <td>${getMonthLabel(monthDate)}</td>
+      </tr>`;
+    }
+
+    function renderCalendar(events, onMonthChange) {
       const calendarEl = document.getElementById("moneyCalendar");
       if (!calendarEl || typeof FullCalendar === "undefined") return;
 
@@ -272,6 +326,11 @@
           left: "prev,next today",
           center: "title",
           right: ""
+        },
+        datesSet(info) {
+          if (typeof onMonthChange === "function") {
+            onMonthChange(info.view.currentStart);
+          }
         }
       });
       window.moneyCalendarInstance.render();
@@ -289,7 +348,9 @@
 
       renderTable(moneyInData.rows, "moneyInBody", "No valid money in entries found.");
       renderTable(moneyOutData.rows, "moneyOutBody", "No valid bill entries found.");
-      renderCalendar([...moneyInData.events, ...moneyOutData.events]);
+      renderCalendar([...moneyInData.events, ...moneyOutData.events], (monthDate) => {
+        renderMonthlySummaryTable(monthDate, moneyInData.events, moneyOutData.events);
+      });
     }
 
     window.addEventListener("DOMContentLoaded", renderApp);
@@ -334,6 +395,18 @@
     }
     th {
       background: rgba(127, 127, 127, 0.15);
+    }
+    .total-positive {
+      color: #198754;
+      font-weight: 700;
+    }
+    .total-negative {
+      color: #dc3545;
+      font-weight: 700;
+    }
+    .total-neutral {
+      color: inherit;
+      font-weight: 700;
     }
     /* Keep FullCalendar month title truly centered */
     .fc .fc-header-toolbar {
@@ -385,6 +458,18 @@
       </tr>
     </thead>
     <tbody id="moneyOutBody"></tbody>
+  </table>
+  <h2>Monthly Totals</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Money In</th>
+        <th>Money out</th>
+        <th>Total</th>
+        <th>Month</th>
+      </tr>
+    </thead>
+    <tbody id="monthlySummaryBody"></tbody>
   </table>
   <div id="moneyCalendar" aria-label="Money calendar"></div>
 </body>
