@@ -443,6 +443,18 @@
     .fc .fc-col-header-cell-cushion {
       color: #000;
     }
+    /* Allow long calendar event titles to wrap to additional lines. */
+    .fc .fc-daygrid-event {
+      white-space: normal;
+    }
+    .fc .fc-daygrid-event .fc-event-main,
+    .fc .fc-daygrid-event .fc-event-title {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
