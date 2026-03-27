@@ -349,6 +349,46 @@
       return total;
     }
 
+    function sumUniqueBillEvents(recurringBillsEvents, predicate) {
+      const seen = new Set();
+      let total = 0;
+      const today = startOfDay(new Date());
+
+      for (const event of recurringBillsEvents) {
+        const eventDate = parseIsoDate(event.start);
+        if (!eventDate) continue;
+        if (!predicate(eventDate, today)) continue;
+
+        const dedupeKey = `${event.start}|${event.title}|${Number(event.amount).toFixed(2)}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        total += Number(event.amount) || 0;
+      }
+
+      return total;
+    }
+
+    function getNextMoneyInAfterToday(moneyEntries) {
+      const now = startOfDay(new Date());
+      let best = null;
+
+      for (const entry of moneyEntries) {
+        const normalized = normalizeEntry(entry);
+        if (!normalized) continue;
+        const strategy = getRecurrenceStrategy(normalized.schedule);
+        if (!strategy) continue;
+
+        let d = startOfDay(strategy.nextOnOrAfter(normalized.schedule, normalized.baseDate, now));
+        if (d.getTime() === now.getTime()) {
+          d = startOfDay(strategy.next(normalized.schedule, d));
+        }
+        if (!best || d < best) best = d;
+      }
+
+      return best;
+    }
+
     function renderMonthlySummaryTable(monthDate, moneyInEvents, recurringBillsEvents, budgetsTotal) {
       const tbody = document.getElementById("monthlySummaryBody");
       if (!tbody) return;
@@ -365,6 +405,30 @@
         <td>${currencySymbol}${budgetsTotal.toFixed(2)}</td>
         <td class="${totalClass}">${currencySymbol}${netTotal.toFixed(2)}</td>
         <td>${getMonthLabel(monthDate)}</td>
+      </tr>`;
+    }
+
+    function renderBillsBreakdownTable(monthDate, recurringBillsEvents, moneyEntries) {
+      const tbody = document.getElementById("billsBreakdownBody");
+      if (!tbody) return;
+
+      const monthKey = getEventMonthKey(monthDate);
+      const billsLeftToPay = sumUniqueBillEvents(recurringBillsEvents, (eventDate, today) => {
+        return getEventMonthKey(eventDate) === monthKey && startOfDay(eventDate) >= today;
+      });
+
+      const nextPay = getNextMoneyInAfterToday(moneyEntries);
+      const billsBeforePayday =
+        nextPay === null
+          ? 0
+          : sumUniqueBillEvents(recurringBillsEvents, (eventDate, today) => {
+              const d = startOfDay(eventDate);
+              return d >= today && d < nextPay;
+            });
+
+      tbody.innerHTML = `<tr>
+        <td>${currencySymbol}${billsLeftToPay.toFixed(2)}</td>
+        <td>${currencySymbol}${billsBeforePayday.toFixed(2)}</td>
       </tr>`;
     }
 
@@ -411,6 +475,7 @@
       renderSimpleTable(budgetsData.rows, "budgetsBody", "No valid budget entries found.");
       renderCalendar([...moneyInData.events, ...recurringBillsData.events], (monthDate) => {
         renderMonthlySummaryTable(monthDate, moneyInData.events, recurringBillsData.events, budgetsData.total);
+        renderBillsBreakdownTable(monthDate, recurringBillsData.events, money_in);
       });
     }
 
@@ -562,6 +627,16 @@
       </tr>
     </thead>
     <tbody id="monthlySummaryBody"></tbody>
+  </table>
+  <h2>Bills Breakdown</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Bills Left to Pay This Month</th>
+        <th>Bills Before Next Money In</th>
+      </tr>
+    </thead>
+    <tbody id="billsBreakdownBody"></tbody>
   </table>
   <div id="moneyCalendar" aria-label="Money calendar"></div>
   <footer>
