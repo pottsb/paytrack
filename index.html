@@ -12,7 +12,7 @@
     ];
     const money_out = [
       { name: "Rent", amount: 450, baseDate: "01/03/24", type: "calendar_date", calendarDay: 1 },
-      { name: "Phone", amount: 35, baseDate: "20/03/24", type: "fixed_period", periodDays: 30 }
+      { name: "Phone", amount: 35, baseDate: "20/03/24", type: "fixed_period", periodDays: 30 },
     ];
 
     const currencySymbol = "£";
@@ -28,16 +28,8 @@
       if (!Number.isFinite(day) || !Number.isFinite(monthIndex) || !Number.isFinite(year)) return null;
 
       if (parts[2].length === 2) year += 2000;
-      const date = new Date(year, monthIndex, day);
 
-      if (
-        date.getFullYear() !== year ||
-        date.getMonth() !== monthIndex ||
-        date.getDate() !== day
-      ) {
-        return null;
-      }
-      return date;
+      return new Date(year, monthIndex, day);
     }
 
     function startOfDay(date) {
@@ -66,94 +58,148 @@
       return new Date(year, monthIndex + 1, 0).getDate();
     }
 
-    function getNextPaymentDate(payment, today) {
-      const base = parseDate(payment.baseDate);
-      if (!base) return null;
-
-      const now = startOfDay(today);
+    function getPaymentSchedule(payment) {
       if (payment.type === "fixed_period") {
         const periodDays = Number(payment.periodDays);
         if (!Number.isFinite(periodDays) || periodDays <= 0) return null;
-
-        const baseStart = startOfDay(base);
-        if (baseStart >= now) return baseStart;
-
-        const elapsedDays = Math.floor((now - baseStart) / msPerDay);
-        const periodsElapsed = Math.ceil(elapsedDays / periodDays);
-        return new Date(
-          baseStart.getFullYear(),
-          baseStart.getMonth(),
-          baseStart.getDate() + periodsElapsed * periodDays
-        );
+        return { type: "fixed_period", periodDays };
       }
 
       if (payment.type === "calendar_date") {
         const dayOfMonth = Number(payment.calendarDay);
         if (!Number.isFinite(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
-
-        const year = now.getFullYear();
-        const monthIndex = now.getMonth();
-
-        const currentMonthDay = Math.min(dayOfMonth, endOfMonthDay(year, monthIndex));
-        const candidateThisMonth = new Date(year, monthIndex, currentMonthDay);
-        if (candidateThisMonth >= now) return candidateThisMonth;
-
-        const nextMonthIndex = monthIndex + 1;
-        const nextYear = year + Math.floor(nextMonthIndex / 12);
-        const normalizedMonth = nextMonthIndex % 12;
-        const nextMonthDay = Math.min(dayOfMonth, endOfMonthDay(nextYear, normalizedMonth));
-        return new Date(nextYear, normalizedMonth, nextMonthDay);
+        return { type: "calendar_date", dayOfMonth };
       }
 
       return null;
     }
 
-    function getLastPaymentDate(payment, today, nextDate) {
-      const base = parseDate(payment.baseDate);
-      if (!base || !nextDate) return null;
+    function shiftMonth(year, monthIndex, offset) {
+      const absolute = year * 12 + monthIndex + offset;
+      return {
+        year: Math.floor(absolute / 12),
+        monthIndex: ((absolute % 12) + 12) % 12
+      };
+    }
 
-      const now = startOfDay(today);
-      if (payment.type === "fixed_period") {
-        const periodDays = Number(payment.periodDays);
-        if (!Number.isFinite(periodDays) || periodDays <= 0) return null;
+    function createCalendarDate(year, monthIndex, dayOfMonth) {
+      const monthDay = Math.min(dayOfMonth, endOfMonthDay(year, monthIndex));
+      return new Date(year, monthIndex, monthDay);
+    }
 
-        const next = startOfDay(nextDate);
-        const candidate = new Date(next.getFullYear(), next.getMonth(), next.getDate() - periodDays);
-        return candidate > now ? null : candidate;
-      }
-
-      if (payment.type === "calendar_date") {
-        const dayOfMonth = Number(payment.calendarDay);
-        if (!Number.isFinite(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
-
-        const next = startOfDay(nextDate);
-        if (next > now) {
-          const prevMonthIndex = next.getMonth() - 1;
-          const prevYear = next.getFullYear() + Math.floor(prevMonthIndex / 12);
-          const normalizedMonth = ((prevMonthIndex % 12) + 12) % 12;
-          const prevMonthDay = Math.min(dayOfMonth, endOfMonthDay(prevYear, normalizedMonth));
-          return new Date(prevYear, normalizedMonth, prevMonthDay);
+    const recurrenceStrategies = {
+      fixed_period: {
+        nextOnOrAfter(schedule, baseDate, targetDate) {
+          const base = startOfDay(baseDate);
+          const target = startOfDay(targetDate);
+          if (base >= target) return base;
+          const elapsedDays = Math.floor((target - base) / msPerDay);
+          const periodsElapsed = Math.ceil(elapsedDays / schedule.periodDays);
+          return new Date(base.getFullYear(), base.getMonth(), base.getDate() + periodsElapsed * schedule.periodDays);
+        },
+        previous(schedule, occurrenceDate) {
+          const occurrence = startOfDay(occurrenceDate);
+          return new Date(
+            occurrence.getFullYear(),
+            occurrence.getMonth(),
+            occurrence.getDate() - schedule.periodDays
+          );
+        },
+        next(schedule, occurrenceDate) {
+          const occurrence = startOfDay(occurrenceDate);
+          return new Date(
+            occurrence.getFullYear(),
+            occurrence.getMonth(),
+            occurrence.getDate() + schedule.periodDays
+          );
         }
-        return next;
+      },
+      calendar_date: {
+        nextOnOrAfter(schedule, baseDate, targetDate) {
+          const target = startOfDay(targetDate);
+          const year = target.getFullYear();
+          const monthIndex = target.getMonth();
+          const candidateThisMonth = createCalendarDate(year, monthIndex, schedule.dayOfMonth);
+          if (candidateThisMonth >= target) return candidateThisMonth;
+          const nextMonth = shiftMonth(year, monthIndex, 1);
+          return createCalendarDate(nextMonth.year, nextMonth.monthIndex, schedule.dayOfMonth);
+        },
+        previous(schedule, occurrenceDate) {
+          const occurrence = startOfDay(occurrenceDate);
+          const prevMonth = shiftMonth(occurrence.getFullYear(), occurrence.getMonth(), -1);
+          return createCalendarDate(prevMonth.year, prevMonth.monthIndex, schedule.dayOfMonth);
+        },
+        next(schedule, occurrenceDate) {
+          const occurrence = startOfDay(occurrenceDate);
+          const nextMonth = shiftMonth(occurrence.getFullYear(), occurrence.getMonth(), 1);
+          return createCalendarDate(nextMonth.year, nextMonth.monthIndex, schedule.dayOfMonth);
+        }
+      }
+    };
+
+    function normalizeEntry(entry) {
+      const baseDate = parseDate(entry.baseDate);
+      const schedule = getPaymentSchedule(entry);
+      if (!baseDate || !schedule) return null;
+      return {
+        name: entry.name,
+        amount: Number(entry.amount),
+        baseDate: startOfDay(baseDate),
+        schedule
+      };
+    }
+
+    function getRecurrenceStrategy(schedule) {
+      return recurrenceStrategies[schedule.type] || null;
+    }
+
+    function projectEntryTimeline(entry, nowDate, horizonEndDate) {
+      const strategy = getRecurrenceStrategy(entry.schedule);
+      if (!strategy) return null;
+
+      const now = startOfDay(nowDate);
+      const horizonEnd = startOfDay(horizonEndDate);
+      const nextDate = strategy.nextOnOrAfter(entry.schedule, entry.baseDate, now);
+      const previousCandidate = strategy.previous(entry.schedule, nextDate);
+      const previousDate = entry.schedule.type === "calendar_date" && nextDate <= now
+        ? nextDate
+        : (previousCandidate > now ? null : previousCandidate);
+
+      const upcomingDates = [];
+      let cursor = startOfDay(nextDate);
+      while (cursor <= horizonEnd) {
+        upcomingDates.push(cursor);
+        cursor = strategy.next(entry.schedule, cursor);
       }
 
-      return null;
+      return {
+        previousDate,
+        nextDate,
+        upcomingDates
+      };
     }
 
     function buildEntriesData(entries, options) {
       const today = new Date();
+      const calendarEndDate = new Date(today.getFullYear() + 2, today.getMonth(), today.getDate());
       const rows = [];
       const events = [];
       const futureColor = options.futureColor;
-      const pastColor = options.pastColor || "#6c757d";
+      const pastColor = options.pastColor;
 
       for (const entry of entries) {
-        const nextDate = getNextPaymentDate(entry, today);
-        if (!nextDate) {
+        const normalized = normalizeEntry(entry);
+        if (!normalized) {
           console.warn("Skipping invalid entry:", entry);
           continue;
         }
-        const lastDate = getLastPaymentDate(entry, today, nextDate);
+        const timeline = projectEntryTimeline(normalized, today, calendarEndDate);
+        if (!timeline) {
+          console.warn("Skipping invalid entry:", entry);
+          continue;
+        }
+        const nextDate = timeline.nextDate;
+        const lastDate = timeline.previousDate;
 
         const row = {
           name: entry.name,
@@ -171,13 +217,17 @@
             color: pastColor
           });
         }
-        events.push({
-          title: `${entry.name} ${currencySymbol}${Number(entry.amount).toFixed(2)}`,
-          start: formatIsoDate(nextDate),
-          allDay: true,
-          color: futureColor
-        });
+        for (const futureDate of timeline.upcomingDates) {
+          events.push({
+            title: `${entry.name} ${currencySymbol}${Number(entry.amount).toFixed(2)}`,
+            start: formatIsoDate(futureDate),
+            allDay: true,
+            color: futureColor
+          });
+        }
       }
+
+      rows.sort((a, b) => a.daysUntil - b.daysUntil);
 
       return { rows, events };
     }
