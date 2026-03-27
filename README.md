@@ -1,8 +1,10 @@
 # Pay Tracker
 
-Simple single file html & js static tracker for recurring income (`money_in`) and expenses (`money_out`).
+Simple single file html & js static tracker for recurring income and expenses.
 
-![Pay Tracker example](./example.png)
+<p align="center">
+  <img src="./example.png" alt="Pay Tracker example" />
+</p>
 
 ## Data Structure
 
