@@ -1,16 +1,16 @@
 # Pay Tracker
 
-Simple single file html & js static tracker for recurring income and expenses.
+Simple single-file HTML & JS static tracker for recurring income, recurring bills, and monthly budget allowances.
 
 <p align="center">
   <img src="./example.png" alt="Pay Tracker example" />
 </p>
 
-## Data Structure
+## Data structure
 
-Both `money_in` and `money_out` are arrays of objects.
+### `money_in` and `recurring_bills`
 
-Each object uses this base shape:
+Both are arrays of objects that describe **scheduled** income or expenses. Each entry uses this base shape:
 
 ```js
 {
@@ -22,16 +22,14 @@ Each object uses this base shape:
 
 The recurrence type is inferred from which extra field is present:
 
-- `periodDays` => fixed period recurrence
-- `calendarDay` => monthly calendar-day recurrence
+- `periodDays` — fixed period recurrence
+- `calendarDay` — monthly calendar-day recurrence
 
 Exactly one of these fields must be present.
 
-### `periodDays` (fixed period)
+#### `periodDays` (fixed period)
 
 Use this for events that repeat every _N_ days.
-
-Required extra field:
 
 ```js
 periodDays: 14
@@ -43,11 +41,9 @@ Example:
 { name: "Job1", amount: 600, baseDate: "27/03/24", periodDays: 14 }
 ```
 
-### `calendarDay` (calendar date)
+#### `calendarDay` (calendar date)
 
 Use this for events that repeat monthly on a calendar day.
-
-Required extra field:
 
 ```js
 calendarDay: 28
@@ -59,9 +55,27 @@ Example:
 { name: "Rent", amount: 450, baseDate: "01/03/24", calendarDay: 1 }
 ```
 
-## Where to Edit
+### `budgets`
 
-Update the arrays in `index.html`:
+A separate array for flexible monthly amounts (e.g. food, entertainment, hobbies). Entries are **not** scheduled: they only have a name and amount. They do **not** use `baseDate`, `calendarDay`, or `periodDays`, and they do **not** appear on the calendar.
 
-- `money_in` for incoming money
-- `money_out` for outgoing bills/expenses
+```js
+{
+  name: "Food",
+  amount: 300
+}
+```
+
+## UI behaviour
+
+- **Tables:** Money in, recurring bills (with last/next dates and days until), and budgets (name and amount only).
+- **Calendar:** Shows only **money in** and **recurring bills** — budgets are excluded.
+- **Monthly totals:** For the month shown on the calendar, totals include money in, recurring bills (from scheduled events in that month), budgets (sum of all budget lines, same every month), and a net total: money in minus recurring bills minus budgets.
+
+## Where to edit
+
+Update the arrays at the top of `index.html`:
+
+- `money_in` — incoming money (scheduled)
+- `recurring_bills` — recurring bills/expenses (scheduled)
+- `budgets` — monthly budget lines (name and amount only)

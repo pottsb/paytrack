@@ -11,7 +11,7 @@
       { name: "Freelance Retainer", amount: 420, baseDate: "05/01/24", calendarDay: 5 },
       { name: "Tutoring Session", amount: 95, baseDate: "12/03/24", periodDays: 7 },
     ];
-    const money_out = [
+    const recurring_bills = [
       { name: "Rent", amount: 920, baseDate: "01/01/24", calendarDay: 1 },
       { name: "Electricity", amount: 78, baseDate: "11/01/24", calendarDay: 11 },
       { name: "Water", amount: 32, baseDate: "25/01/24", calendarDay: 25 },
@@ -20,6 +20,12 @@
       { name: "Gym Membership", amount: 29.99, baseDate: "09/03/24", periodDays: 28 },
       { name: "Streaming Services", amount: 19.99, baseDate: "22/03/24", periodDays: 30 },
       { name: "Car Insurance", amount: 64.5, baseDate: "13/01/24", calendarDay: 13 }
+    ];
+    const budgets = [
+      { name: "Food", amount: 300 },
+      { name: "Entertainment", amount: 120 },
+      { name: "Hobbies", amount: 90 },
+      { name: "Flexible Purchases", amount: 150 }
     ];
 
     const currencySymbol = "£";
@@ -245,6 +251,27 @@
       return { rows, events };
     }
 
+    function buildBudgetData(entries) {
+      const rows = [];
+      let total = 0;
+
+      for (const entry of entries) {
+        const amount = Number(entry.amount);
+        if (!Number.isFinite(amount)) {
+          console.warn("Skipping invalid budget entry:", entry);
+          continue;
+        }
+        rows.push({
+          name: entry.name,
+          amount: `${currencySymbol}${amount.toFixed(2)}`
+        });
+        total += amount;
+      }
+
+      rows.sort((a, b) => a.name.localeCompare(b.name));
+      return { rows, total };
+    }
+
     function renderTable(rows, tbodyId, emptyMessage) {
       const tbody = document.getElementById(tbodyId);
       if (!tbody) return;
@@ -263,6 +290,26 @@
               <td>${row.lastDate}</td>
               <td>${row.nextDate}</td>
               <td>${row.daysUntil}</td>
+            </tr>`
+        )
+        .join("");
+    }
+
+    function renderSimpleTable(rows, tbodyId, emptyMessage) {
+      const tbody = document.getElementById(tbodyId);
+      if (!tbody) return;
+
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="2">${emptyMessage}</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows
+        .map(
+          (row) =>
+            `<tr>
+              <td>${row.name}</td>
+              <td>${row.amount}</td>
             </tr>`
         )
         .join("");
@@ -302,19 +349,20 @@
       return total;
     }
 
-    function renderMonthlySummaryTable(monthDate, moneyInEvents, moneyOutEvents) {
+    function renderMonthlySummaryTable(monthDate, moneyInEvents, recurringBillsEvents, budgetsTotal) {
       const tbody = document.getElementById("monthlySummaryBody");
       if (!tbody) return;
 
       const monthKey = getEventMonthKey(monthDate);
       const moneyInTotal = sumUniqueEventsForMonth(moneyInEvents, monthKey);
-      const moneyOutTotal = sumUniqueEventsForMonth(moneyOutEvents, monthKey);
-      const netTotal = moneyInTotal - moneyOutTotal;
+      const recurringBillsTotal = sumUniqueEventsForMonth(recurringBillsEvents, monthKey);
+      const netTotal = moneyInTotal - recurringBillsTotal - budgetsTotal;
       const totalClass = netTotal > 0 ? "total-positive" : (netTotal < 0 ? "total-negative" : "total-neutral");
 
       tbody.innerHTML = `<tr>
         <td>${currencySymbol}${moneyInTotal.toFixed(2)}</td>
-        <td>${currencySymbol}${moneyOutTotal.toFixed(2)}</td>
+        <td>${currencySymbol}${recurringBillsTotal.toFixed(2)}</td>
+        <td>${currencySymbol}${budgetsTotal.toFixed(2)}</td>
         <td class="${totalClass}">${currencySymbol}${netTotal.toFixed(2)}</td>
         <td>${getMonthLabel(monthDate)}</td>
       </tr>`;
@@ -352,15 +400,17 @@
         futureColor: "#198754",
         pastColor: "#6c757d"
       });
-      const moneyOutData = buildEntriesData(money_out, {
+      const recurringBillsData = buildEntriesData(recurring_bills, {
         futureColor: "#dc3545",
         pastColor: "#6c757d"
       });
+      const budgetsData = buildBudgetData(budgets);
 
       renderTable(moneyInData.rows, "moneyInBody", "No valid money in entries found.");
-      renderTable(moneyOutData.rows, "moneyOutBody", "No valid bill entries found.");
-      renderCalendar([...moneyInData.events, ...moneyOutData.events], (monthDate) => {
-        renderMonthlySummaryTable(monthDate, moneyInData.events, moneyOutData.events);
+      renderTable(recurringBillsData.rows, "moneyOutBody", "No valid recurring bill entries found.");
+      renderSimpleTable(budgetsData.rows, "budgetsBody", "No valid budget entries found.");
+      renderCalendar([...moneyInData.events, ...recurringBillsData.events], (monthDate) => {
+        renderMonthlySummaryTable(monthDate, moneyInData.events, recurringBillsData.events, budgetsData.total);
       });
     }
 
@@ -477,7 +527,7 @@
     </thead>
     <tbody id="moneyInBody"></tbody>
   </table>
-  <h2>Money Out</h2>
+  <h2>Recurring Bills</h2>
   <table>
     <thead>
       <tr>
@@ -490,12 +540,23 @@
     </thead>
     <tbody id="moneyOutBody"></tbody>
   </table>
+  <h2>Budgets</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+    <tbody id="budgetsBody"></tbody>
+  </table>
   <h2>Monthly Totals</h2>
   <table>
     <thead>
       <tr>
         <th>Money In</th>
-        <th>Money out</th>
+        <th>Recurring Bills</th>
+        <th>Budgets</th>
         <th>Total</th>
         <th>Month</th>
       </tr>
