@@ -47,6 +47,13 @@
       return `${d}-${m}-${y}`;
     }
 
+    function formatIsoDate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
     function daysUntil(targetDate, nowDate) {
       return Math.round((startOfDay(targetDate) - startOfDay(nowDate)) / msPerDay);
     }
@@ -133,6 +140,7 @@
       const tbody = document.getElementById("paymentsBody");
       const today = new Date();
       const rows = [];
+      const paymentEvents = [];
 
       for (const payment of payments) {
         const nextDate = getNextPaymentDate(payment, today);
@@ -150,10 +158,16 @@
           daysUntil: daysUntil(nextDate, today)
         };
         rows.push(row);
+        paymentEvents.push({
+          title: `${payment.name} ${currencySymbol}${Number(payment.amount).toFixed(2)}`,
+          start: formatIsoDate(nextDate),
+          allDay: true
+        });
       }
 
       if (rows.length === 0) {
         tbody.innerHTML = "<tr><td colspan=\"5\">No valid payment entries found.</td></tr>";
+        renderCalendar([]);
         return;
       }
 
@@ -169,10 +183,40 @@
             </tr>`
         )
         .join("");
+
+      renderCalendar(paymentEvents);
+      console.log(paymentEvents);
+    }
+
+    function renderCalendar(paymentEvents) {
+      const calendarEl = document.getElementById("paymentCalendar");
+      if (!calendarEl || typeof FullCalendar === "undefined") return;
+
+      if (window.paymentCalendarInstance) {
+        window.paymentCalendarInstance.destroy();
+      }
+
+      window.paymentCalendarInstance = new FullCalendar.Calendar(calendarEl, {
+        initialView: "dayGridMonth",
+        height: "auto",
+        firstDay: 1,
+        events: paymentEvents,
+        headerToolbar: {
+          left: "prev,next today",
+          center: "title",
+          right: ""
+        }
+      });
+      window.paymentCalendarInstance.render();
     }
 
     window.addEventListener("DOMContentLoaded", renderTable);
   </script>
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.css"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.17/index.global.min.js"></script>
   <style>
     :root {
       color-scheme: light dark;
@@ -194,6 +238,10 @@
     }
     table {
       border-collapse: collapse;
+      width: 100%;
+      max-width: 760px;
+    }
+    #paymentCalendar {
       width: 100%;
       max-width: 760px;
     }
@@ -221,5 +269,6 @@
     </thead>
     <tbody id="paymentsBody"></tbody>
   </table>
+  <div id="paymentCalendar" aria-label="Payment calendar"></div>
 </body>
 </html>
