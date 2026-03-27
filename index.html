@@ -6,9 +6,13 @@
   <title>Pay Tracker</title>
   <script>
     // Minimal hardcoded data. baseDate accepts DD/MM/YY or DD/MM/YYYY.
-    const payments = [
+    const money_in = [
       { name: "Job1", amount: 600, baseDate: "27/03/24", type: "fixed_period", periodDays: 14 },
       { name: "Job2", amount: 900, baseDate: "27/03/19", type: "calendar_date", calendarDay: 28 }
+    ];
+    const money_out = [
+      { name: "Rent", amount: 450, baseDate: "01/03/24", type: "calendar_date", calendarDay: 1 },
+      { name: "Phone", amount: 35, baseDate: "20/03/24", type: "fixed_period", periodDays: 30 }
     ];
 
     const currencySymbol = "£";
@@ -136,52 +140,54 @@
       return null;
     }
 
-    function buildPaymentData() {
+    function buildEntriesData(entries, options) {
       const today = new Date();
       const rows = [];
-      const paymentEvents = [];
+      const events = [];
+      const futureColor = options.futureColor;
+      const pastColor = options.pastColor || "#6c757d";
 
-      for (const payment of payments) {
-        const nextDate = getNextPaymentDate(payment, today);
+      for (const entry of entries) {
+        const nextDate = getNextPaymentDate(entry, today);
         if (!nextDate) {
-          console.warn("Skipping invalid payment entry:", payment);
+          console.warn("Skipping invalid entry:", entry);
           continue;
         }
-        const lastDate = getLastPaymentDate(payment, today, nextDate);
+        const lastDate = getLastPaymentDate(entry, today, nextDate);
 
         const row = {
-          name: payment.name,
-          amount: `${currencySymbol}${Number(payment.amount).toFixed(2)}`,
+          name: entry.name,
+          amount: `${currencySymbol}${Number(entry.amount).toFixed(2)}`,
           lastDate: lastDate ? formatDate(lastDate) : "-",
           nextDate: formatDate(nextDate),
           daysUntil: daysUntil(nextDate, today)
         };
         rows.push(row);
         if (lastDate) {
-          paymentEvents.push({
-            title: `${payment.name} last ${currencySymbol}${Number(payment.amount).toFixed(2)}`,
+          events.push({
+            title: `${entry.name} ${currencySymbol}${Number(entry.amount).toFixed(2)}`,
             start: formatIsoDate(lastDate),
             allDay: true,
-            color: "#6c757d"
+            color: pastColor
           });
         }
-        paymentEvents.push({
-          title: `${payment.name} next ${currencySymbol}${Number(payment.amount).toFixed(2)}`,
+        events.push({
+          title: `${entry.name} ${currencySymbol}${Number(entry.amount).toFixed(2)}`,
           start: formatIsoDate(nextDate),
           allDay: true,
-          color: "#198754"
+          color: futureColor
         });
       }
 
-      return { rows, paymentEvents };
+      return { rows, events };
     }
 
-    function renderTable(rows) {
-      const tbody = document.getElementById("paymentsBody");
+    function renderTable(rows, tbodyId, emptyMessage) {
+      const tbody = document.getElementById(tbodyId);
       if (!tbody) return;
 
       if (rows.length === 0) {
-        tbody.innerHTML = "<tr><td colspan=\"5\">No valid payment entries found.</td></tr>";
+        tbody.innerHTML = `<tr><td colspan="5">${emptyMessage}</td></tr>`;
         return;
       }
 
@@ -199,32 +205,41 @@
         .join("");
     }
 
-    function renderCalendar(paymentEvents) {
-      const calendarEl = document.getElementById("paymentCalendar");
+    function renderCalendar(events) {
+      const calendarEl = document.getElementById("moneyCalendar");
       if (!calendarEl || typeof FullCalendar === "undefined") return;
 
-      if (window.paymentCalendarInstance) {
-        window.paymentCalendarInstance.destroy();
+      if (window.moneyCalendarInstance) {
+        window.moneyCalendarInstance.destroy();
       }
 
-      window.paymentCalendarInstance = new FullCalendar.Calendar(calendarEl, {
+      window.moneyCalendarInstance = new FullCalendar.Calendar(calendarEl, {
         initialView: "dayGridMonth",
         height: "auto",
         firstDay: 1,
-        events: paymentEvents,
+        events,
         headerToolbar: {
           left: "prev,next today",
           center: "title",
           right: ""
         }
       });
-      window.paymentCalendarInstance.render();
+      window.moneyCalendarInstance.render();
     }
 
     function renderApp() {
-      const { rows, paymentEvents } = buildPaymentData();
-      renderTable(rows);
-      renderCalendar(paymentEvents);
+      const moneyInData = buildEntriesData(money_in, {
+        futureColor: "#198754",
+        pastColor: "#6c757d"
+      });
+      const moneyOutData = buildEntriesData(money_out, {
+        futureColor: "#dc3545",
+        pastColor: "#6c757d"
+      });
+
+      renderTable(moneyInData.rows, "moneyInBody", "No valid money in entries found.");
+      renderTable(moneyOutData.rows, "moneyOutBody", "No valid bill entries found.");
+      renderCalendar([...moneyInData.events, ...moneyOutData.events]);
     }
 
     window.addEventListener("DOMContentLoaded", renderApp);
@@ -258,7 +273,7 @@
       width: 100%;
       max-width: 760px;
     }
-    #paymentCalendar {
+    #moneyCalendar {
       width: 100%;
       max-width: 760px;
     }
@@ -270,22 +285,57 @@
     th {
       background: rgba(127, 127, 127, 0.15);
     }
+    /* Keep FullCalendar month title truly centered */
+    .fc .fc-header-toolbar {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      width: 100%;
+    }
+    .fc .fc-toolbar-chunk:nth-child(1) {
+      justify-self: start;
+    }
+    .fc .fc-toolbar-chunk:nth-child(2) {
+      justify-self: center;
+    }
+    .fc .fc-toolbar-chunk:nth-child(3) {
+      justify-self: end;
+    }
+    .fc .fc-toolbar-title {
+      margin: 0;
+      text-align: center;
+      line-height: 1.2;
+    }
   </style>
 </head>
 <body>
   <h1>Pay Tracker</h1>
+  <h2>Money In</h2>
   <table>
     <thead>
       <tr>
         <th>Name</th>
         <th>Amount</th>
-        <th>Last Payment Date</th>
-        <th>Next Payment Date</th>
+        <th>Last Money In Date</th>
+        <th>Next Money In Date</th>
         <th>Days Until</th>
       </tr>
     </thead>
-    <tbody id="paymentsBody"></tbody>
+    <tbody id="moneyInBody"></tbody>
   </table>
-  <div id="paymentCalendar" aria-label="Payment calendar"></div>
+  <h2>Money Out</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Amount</th>
+        <th>Last Bill Date</th>
+        <th>Next Bill Date</th>
+        <th>Days Until</th>
+      </tr>
+    </thead>
+    <tbody id="moneyOutBody"></tbody>
+  </table>
+  <div id="moneyCalendar" aria-label="Money calendar"></div>
 </body>
 </html>
