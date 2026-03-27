@@ -136,8 +136,7 @@
       return null;
     }
 
-    function renderTable() {
-      const tbody = document.getElementById("paymentsBody");
+    function buildPaymentData() {
       const today = new Date();
       const rows = [];
       const paymentEvents = [];
@@ -158,16 +157,31 @@
           daysUntil: daysUntil(nextDate, today)
         };
         rows.push(row);
+        if (lastDate) {
+          paymentEvents.push({
+            title: `${payment.name} last ${currencySymbol}${Number(payment.amount).toFixed(2)}`,
+            start: formatIsoDate(lastDate),
+            allDay: true,
+            color: "#6c757d"
+          });
+        }
         paymentEvents.push({
-          title: `${payment.name} ${currencySymbol}${Number(payment.amount).toFixed(2)}`,
+          title: `${payment.name} next ${currencySymbol}${Number(payment.amount).toFixed(2)}`,
           start: formatIsoDate(nextDate),
-          allDay: true
+          allDay: true,
+          color: "#198754"
         });
       }
 
+      return { rows, paymentEvents };
+    }
+
+    function renderTable(rows) {
+      const tbody = document.getElementById("paymentsBody");
+      if (!tbody) return;
+
       if (rows.length === 0) {
         tbody.innerHTML = "<tr><td colspan=\"5\">No valid payment entries found.</td></tr>";
-        renderCalendar([]);
         return;
       }
 
@@ -183,9 +197,6 @@
             </tr>`
         )
         .join("");
-
-      renderCalendar(paymentEvents);
-      console.log(paymentEvents);
     }
 
     function renderCalendar(paymentEvents) {
@@ -210,7 +221,13 @@
       window.paymentCalendarInstance.render();
     }
 
-    window.addEventListener("DOMContentLoaded", renderTable);
+    function renderApp() {
+      const { rows, paymentEvents } = buildPaymentData();
+      renderTable(rows);
+      renderCalendar(paymentEvents);
+    }
+
+    window.addEventListener("DOMContentLoaded", renderApp);
   </script>
   <link
     rel="stylesheet"
