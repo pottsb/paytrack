@@ -5,14 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pay Tracker</title>
   <script>
-    // Minimal hardcoded data. baseDate accepts DD/MM/YY or DD/MM/YYYY.
+    // Example data. baseDate accepts DD/MM/YY or DD/MM/YYYY.
     const money_in = [
-      { name: "Job1", amount: 600, baseDate: "27/03/24", type: "fixed_period", periodDays: 14 },
-      { name: "Job2", amount: 900, baseDate: "27/03/19", type: "calendar_date", calendarDay: 28 }
+      { name: "Primary Salary", amount: 1850, baseDate: "28/02/23", calendarDay: 28 },
+      { name: "Freelance Retainer", amount: 420, baseDate: "05/01/24", calendarDay: 5 },
+      { name: "Tutoring Session", amount: 95, baseDate: "12/03/24", periodDays: 7 },
     ];
     const money_out = [
-      { name: "Rent", amount: 450, baseDate: "01/03/24", type: "calendar_date", calendarDay: 1 },
-      { name: "Phone", amount: 35, baseDate: "20/03/24", type: "fixed_period", periodDays: 30 },
+      { name: "Rent", amount: 920, baseDate: "01/01/24", calendarDay: 1 },
+      { name: "Electricity", amount: 78, baseDate: "11/01/24", calendarDay: 11 },
+      { name: "Water", amount: 32, baseDate: "25/01/24", calendarDay: 25 },
+      { name: "Mobile Phone", amount: 24, baseDate: "20/03/24", periodDays: 30 },
+      { name: "Internet", amount: 45, baseDate: "17/02/24", calendarDay: 17 },
+      { name: "Gym Membership", amount: 29.99, baseDate: "09/03/24", periodDays: 28 },
+      { name: "Streaming Services", amount: 19.99, baseDate: "22/03/24", periodDays: 30 },
+      { name: "Car Insurance", amount: 64.5, baseDate: "13/01/24", calendarDay: 13 }
     ];
 
     const currencySymbol = "£";
@@ -59,13 +66,17 @@
     }
 
     function getPaymentSchedule(payment) {
-      if (payment.type === "fixed_period") {
+      const hasPeriodDays = payment.periodDays !== undefined && payment.periodDays !== null;
+      const hasCalendarDay = payment.calendarDay !== undefined && payment.calendarDay !== null;
+      if (hasPeriodDays === hasCalendarDay) return null;
+
+      if (hasPeriodDays) {
         const periodDays = Number(payment.periodDays);
         if (!Number.isFinite(periodDays) || periodDays <= 0) return null;
         return { type: "fixed_period", periodDays };
       }
 
-      if (payment.type === "calendar_date") {
+      if (hasCalendarDay) {
         const dayOfMonth = Number(payment.calendarDay);
         if (!Number.isFinite(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
         return { type: "calendar_date", dayOfMonth };
