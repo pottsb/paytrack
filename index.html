@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pay Tracker</title>
+  <script>
+    // Minimal hardcoded data. baseDate accepts DD/MM/YY or DD/MM/YYYY.
+    const payments = [
+      { name: "Job1", amount: 600, baseDate: "27/03/24", type: "fixed_period", periodDays: 14 },
+      { name: "Job2", amount: 900, baseDate: "27/03/19", type: "calendar_date", calendarDay: 28 }
+    ];
+
+    const currencySymbol = "£";
+    const msPerDay = 24 * 60 * 60 * 1000;
+
+    function parseDate(value) {
+      const parts = String(value).split("/");
+      if (parts.length !== 3) return null;
+
+      const day = Number(parts[0]);
+      const monthIndex = Number(parts[1]) - 1;
+      let year = Number(parts[2]);
+      if (!Number.isFinite(day) || !Number.isFinite(monthIndex) || !Number.isFinite(year)) return null;
+
+      if (parts[2].length === 2) year += 2000;
+      const date = new Date(year, monthIndex, day);
+
+      if (
+        date.getFullYear() !== year ||
+        date.getMonth() !== monthIndex ||
+        date.getDate() !== day
+      ) {
+        return null;
+      }
+      return date;
+    }
+
+    function startOfDay(date) {
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function formatDate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${d}-${m}-${y}`;
+    }
+
+    function daysUntil(targetDate, nowDate) {
+      return Math.round((startOfDay(targetDate) - startOfDay(nowDate)) / msPerDay);
+    }
+
+    function endOfMonthDay(year, monthIndex) {
+      return new Date(year, monthIndex + 1, 0).getDate();
+    }
+
+    function getNextPaymentDate(payment, today) {
+      const base = parseDate(payment.baseDate);
+      if (!base) return null;
+
+      const now = startOfDay(today);
+      if (payment.type === "fixed_period") {
+        const periodDays = Number(payment.periodDays);
+        if (!Number.isFinite(periodDays) || periodDays <= 0) return null;
+
+        const baseStart = startOfDay(base);
+        if (baseStart >= now) return baseStart;
+
+        const elapsedDays = Math.floor((now - baseStart) / msPerDay);
+        const periodsElapsed = Math.ceil(elapsedDays / periodDays);
+        return new Date(
+          baseStart.getFullYear(),
+          baseStart.getMonth(),
+          baseStart.getDate() + periodsElapsed * periodDays
+        );
+      }
+
+      if (payment.type === "calendar_date") {
+        const dayOfMonth = Number(payment.calendarDay);
+        if (!Number.isFinite(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
+
+        const year = now.getFullYear();
+        const monthIndex = now.getMonth();
+
+        const currentMonthDay = Math.min(dayOfMonth, endOfMonthDay(year, monthIndex));
+        const candidateThisMonth = new Date(year, monthIndex, currentMonthDay);
+        if (candidateThisMonth >= now) return candidateThisMonth;
+
+        const nextMonthIndex = monthIndex + 1;
+        const nextYear = year + Math.floor(nextMonthIndex / 12);
+        const normalizedMonth = nextMonthIndex % 12;
+        const nextMonthDay = Math.min(dayOfMonth, endOfMonthDay(nextYear, normalizedMonth));
+        return new Date(nextYear, normalizedMonth, nextMonthDay);
+      }
+
+      return null;
+    }
+
+    function getLastPaymentDate(payment, today, nextDate) {
+      const base = parseDate(payment.baseDate);
+      if (!base || !nextDate) return null;
+
+      const now = startOfDay(today);
+      if (payment.type === "fixed_period") {
+        const periodDays = Number(payment.periodDays);
+        if (!Number.isFinite(periodDays) || periodDays <= 0) return null;
+
+        const next = startOfDay(nextDate);
+        const candidate = new Date(next.getFullYear(), next.getMonth(), next.getDate() - periodDays);
+        return candidate > now ? null : candidate;
+      }
+
+      if (payment.type === "calendar_date") {
+        const dayOfMonth = Number(payment.calendarDay);
+        if (!Number.isFinite(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
+
+        const next = startOfDay(nextDate);
+        if (next > now) {
+          const prevMonthIndex = next.getMonth() - 1;
+          const prevYear = next.getFullYear() + Math.floor(prevMonthIndex / 12);
+          const normalizedMonth = ((prevMonthIndex % 12) + 12) % 12;
+          const prevMonthDay = Math.min(dayOfMonth, endOfMonthDay(prevYear, normalizedMonth));
+          return new Date(prevYear, normalizedMonth, prevMonthDay);
+        }
+        return next;
+      }
+
+      return null;
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("paymentsBody");
+      const today = new Date();
+      const rows = [];
+
+      for (const payment of payments) {
+        const nextDate = getNextPaymentDate(payment, today);
+        if (!nextDate) {
+          console.warn("Skipping invalid payment entry:", payment);
+          continue;
+        }
+        const lastDate = getLastPaymentDate(payment, today, nextDate);
+
+        const row = {
+          name: payment.name,
+          amount: `${currencySymbol}${Number(payment.amount).toFixed(2)}`,
+          lastDate: lastDate ? formatDate(lastDate) : "-",
+          nextDate: formatDate(nextDate),
+          daysUntil: daysUntil(nextDate, today)
+        };
+        rows.push(row);
+      }
+
+      if (rows.length === 0) {
+        tbody.innerHTML = "<tr><td colspan=\"5\">No valid payment entries found.</td></tr>";
+        return;
+      }
+
+      tbody.innerHTML = rows
+        .map(
+          (row) =>
+            `<tr>
+              <td>${row.name}</td>
+              <td>${row.amount}</td>
+              <td>${row.lastDate}</td>
+              <td>${row.nextDate}</td>
+              <td>${row.daysUntil}</td>
+            </tr>`
+        )
+        .join("");
+    }
+
+    window.addEventListener("DOMContentLoaded", renderTable);
+  </script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.4rem;
+      text-align: center;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 760px;
+    }
+    th, td {
+      border: 1px solid #999;
+      padding: 8px 10px;
+      text-align: left;
+    }
+    th {
+      background: rgba(127, 127, 127, 0.15);
+    }
+  </style>
+</head>
+<body>
+  <h1>Pay Tracker</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Amount</th>
+        <th>Last Payment Date</th>
+        <th>Next Payment Date</th>
+        <th>Days Until</th>
+      </tr>
+    </thead>
+    <tbody id="paymentsBody"></tbody>
+  </table>
+</body>
+</html>
