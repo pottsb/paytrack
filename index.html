@@ -64,7 +64,15 @@
     }
 
     function daysUntil(targetDate, nowDate) {
-      return Math.round((startOfDay(targetDate) - startOfDay(nowDate)) / msPerDay);
+      return Math.round(dayDiff(startOfDay(nowDate), startOfDay(targetDate)));
+    }
+
+    function utcDayNumber(date) {
+      return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / msPerDay;
+    }
+
+    function dayDiff(fromDate, toDate) {
+      return utcDayNumber(toDate) - utcDayNumber(fromDate);
     }
 
     function endOfMonthDay(year, monthIndex) {
@@ -110,7 +118,7 @@
           const base = startOfDay(baseDate);
           const target = startOfDay(targetDate);
           if (base >= target) return base;
-          const elapsedDays = Math.floor((target - base) / msPerDay);
+          const elapsedDays = dayDiff(base, target);
           const periodsElapsed = Math.ceil(elapsedDays / schedule.periodDays);
           return new Date(base.getFullYear(), base.getMonth(), base.getDate() + periodsElapsed * schedule.periodDays);
         },
